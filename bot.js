@@ -1,4 +1,6 @@
 const { Client, GatewayIntentBits } = require('discord.js');
+const fs = require('fs').promises;
+const path = require('path');
 const config = require('./config.js');
 
 const client = new Client({ 
@@ -9,6 +11,12 @@ const client = new Client({
         GatewayIntentBits.MessageContent
     ]
 });
+
+// File to store crash data
+const CRASH_DATA_FILE = 'crash_data.json';
+
+// Track active trackers
+const activeTrackers = new Map();
 
 function formatTime(seconds) {
     const days = Math.floor(seconds / 86400);
@@ -25,48 +33,112 @@ function formatTime(seconds) {
     return timeString;
 }
 
-client.once('ready', () => {
+async function saveCrashData(data) {
+    try {
+        await fs.writeFile(CRASH_DATA_FILE, JSON.stringify(data, null, 2));
+    } catch (error) {
+        console.error('Error saving crash data:', error.message);
+    }
+}
+
+async function loadCrashData() {
+    try {
+        const data = await fs.readFile(CRASH_DATA_FILE, 'utf8');
+        return JSON.parse(data);
+    } catch (error) {
+        console.error('Error loading crash data:', error.message);
+        return null;
+    }
+}
+
+async function clearCrashData() {
+    try {
+        await fs.unlink(CRASH_DATA_FILE);
+    } catch (error) {
+        // Ignore error if file doesn't exist
+        if (error.code !== 'ENOENT') {
+            console.error('Error clearing crash data:', error.message);
+        }
+    }
+}
+
+client.once('ready', async () => {
     console.log(`Bot is ready! Logged in as ${client.user.tag}`);
     console.log(`Using prefix: ${config.prefix}`);
     console.log(`Tracker settings: Updates every ${config.tracker.updateInterval/1000} seconds, increments by ${config.tracker.incrementAmount} seconds`);
+
+    // Try to recover any existing crash data
+    const crashData = await loadCrashData();
+    if (crashData) {
+        console.log('Found existing crash data, attempting recovery...');
+        try {
+            const channel = await client.channels.fetch(crashData.channelId);
+            if (channel) {
+                const message = await channel.messages.fetch(crashData.messageId);
+                if (message) {
+                    console.log('Recovering crash tracker...');
+                    startTracker(channel, message, crashData.timeSinceLastCrash, crashData.lastCrashBy);
+                }
+            }
+        } catch (error) {
+            console.error('Error recovering crash tracker:', error.message);
+        }
+    }
 });
 
-client.on('messageCreate', async (message) => {
-    console.log(`Received message: ${message.content}`);
+function startTracker(channel, existingMessage = null, initialTime = 0, initialLastCrashBy = null) {
+    let timeSinceLastCrash = initialTime;
+    let lastCrashBy = initialLastCrashBy;
+    let retryCount = 0;
+    const maxRetries = 3;
+    let interval;
     
-    if (message.content === `${config.prefix}startTracker`) {
-        console.log('Starting Minicopter crash tracker...');
-        let timeSinceLastCrash = 0;
-        let lastCrashBy = null;
-        let retryCount = 0;
-        const maxRetries = 3;
-        
+    const updateMessage = async (message) => {
         try {
-            const trackerMsg = await message.channel.send(`🛩️ Minicopter Crash Tracker\nTime since last crash: ${formatTime(timeSinceLastCrash)}`);
-            await trackerMsg.react('🔄');
-
-            const interval = setInterval(async () => {
-                timeSinceLastCrash += config.tracker.incrementAmount;
+            const messageContent = lastCrashBy 
+                ? `🛩️ Minicopter Crash Tracker\nTime since last crash: ${formatTime(timeSinceLastCrash)}\nLast crash reported by: ${lastCrashBy}`
+                : `🛩️ Minicopter Crash Tracker\nTime since last crash: ${formatTime(timeSinceLastCrash)}`;
+            await message.edit(messageContent);
+            retryCount = 0;
+            
+            // Save current state
+            await saveCrashData({
+                channelId: channel.id,
+                messageId: message.id,
+                timeSinceLastCrash,
+                lastCrashBy,
+                lastUpdate: Date.now()
+            });
+        } catch (error) {
+            console.error('Error updating tracker:', error.message);
+            retryCount++;
+            
+            if (retryCount >= maxRetries) {
+                console.error('Max retries reached, stopping tracker');
+                stopTracker(channel.id);
                 try {
-                    const message = lastCrashBy 
-                        ? `🛩️ Minicopter Crash Tracker\nTime since last crash: ${formatTime(timeSinceLastCrash)}\nLast crash reported by: ${lastCrashBy}`
-                        : `🛩️ Minicopter Crash Tracker\nTime since last crash: ${formatTime(timeSinceLastCrash)}`;
-                    await trackerMsg.edit(message);
-                    retryCount = 0;
-                } catch (error) {
-                    console.error('Error updating tracker:', error.message);
-                    retryCount++;
-                    
-                    if (retryCount >= maxRetries) {
-                        console.error('Max retries reached, stopping tracker');
-                        clearInterval(interval);
-                        try {
-                            await trackerMsg.edit(`🛩️ Minicopter Crash Tracker\nTracker stopped due to connection issues.\nLast known time: ${formatTime(timeSinceLastCrash)}`);
-                        } catch (e) {
-                            console.error('Could not send final message:', e.message);
-                        }
-                    }
+                    await message.edit(`🛩️ Minicopter Crash Tracker\nTracker stopped due to connection issues.\nLast known time: ${formatTime(timeSinceLastCrash)}`);
+                } catch (e) {
+                    console.error('Could not send final message:', e.message);
                 }
+            }
+        }
+    };
+
+    const startTracking = async () => {
+        try {
+            let trackerMsg;
+            if (existingMessage) {
+                trackerMsg = existingMessage;
+                await updateMessage(trackerMsg);
+            } else {
+                trackerMsg = await channel.send(`🛩️ Minicopter Crash Tracker\nTime since last crash: ${formatTime(timeSinceLastCrash)}`);
+                await trackerMsg.react('🔄');
+            }
+
+            interval = setInterval(async () => {
+                timeSinceLastCrash += config.tracker.incrementAmount;
+                await updateMessage(trackerMsg);
             }, config.tracker.updateInterval);
 
             const filter = (reaction, user) => reaction.emoji.name === '🔄' && !user.bot;
@@ -77,7 +149,7 @@ client.on('messageCreate', async (message) => {
                 timeSinceLastCrash = 0;
                 lastCrashBy = user.tag;
                 try {
-                    await trackerMsg.edit(`🛩️ Minicopter Crash Tracker\nTime since last crash: ${formatTime(timeSinceLastCrash)}\nLast crash reported by: ${user.tag}`);
+                    await updateMessage(trackerMsg);
                     await reaction.users.remove(user.id);
                 } catch (error) {
                     console.error('Error updating crash report:', error.message);
@@ -86,10 +158,53 @@ client.on('messageCreate', async (message) => {
 
             collector.on('end', () => {
                 clearInterval(interval);
+                activeTrackers.delete(channel.id);
             });
+
+            // Store the tracker info
+            activeTrackers.set(channel.id, {
+                message: trackerMsg,
+                interval,
+                collector
+            });
+
         } catch (error) {
             console.error('Error starting tracker:', error.message);
-            await message.channel.send('Failed to start Minicopter crash tracker. Please try again later.');
+            channel.send('Failed to start Minicopter crash tracker. Please try again later.');
+        }
+    };
+
+    startTracking();
+}
+
+function stopTracker(channelId) {
+    const tracker = activeTrackers.get(channelId);
+    if (tracker) {
+        clearInterval(tracker.interval);
+        tracker.collector.stop();
+        activeTrackers.delete(channelId);
+        // Clear the crash data when stopping the tracker
+        clearCrashData();
+        return true;
+    }
+    return false;
+}
+
+client.on('messageCreate', async (message) => {
+    console.log(`Received message: ${message.content}`);
+    
+    if (message.content === `${config.prefix}startTracker`) {
+        if (activeTrackers.has(message.channel.id)) {
+            message.reply('A tracker is already running in this channel. Use `!stopTracker` to stop it first.');
+            return;
+        }
+        console.log('Starting Minicopter crash tracker...');
+        startTracker(message.channel);
+    } else if (message.content === `${config.prefix}stopTracker`) {
+        if (stopTracker(message.channel.id)) {
+            message.reply('Tracker stopped successfully.');
+        } else {
+            message.reply('No active tracker found in this channel.');
         }
     }
 });

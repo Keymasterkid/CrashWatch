@@ -9,6 +9,8 @@ A Discord bot that tracks Minicopter crashes in Rust. Created by BaseCode™ (ke
 - Shows who last reported a crash
 - Easy to use with reaction-based crash reporting
 - Continuous tracking until bot restart
+- Automatic crash recovery after bot restarts
+- Data persistence to maintain tracking state
 
 ## Setup
 
@@ -50,8 +52,23 @@ npm start
 ## Usage
 
 - Start the tracker: `!startTracker`
+- Stop the tracker: `!stopTracker`
 - Report a crash: Click the 🔄 reaction on the tracker message
-- The tracker will continue running until the bot is restarted
+- The tracker will continue running until stopped or the bot is restarted
+- After a bot restart, the tracker will automatically recover and continue from where it left off
+
+## Data Persistence
+
+The bot automatically saves its state to `crash_data.json`, which includes:
+- Current tracking time
+- Last crash reporter
+- Channel and message information
+- Last update timestamp
+
+This allows the bot to:
+- Recover after crashes or restarts
+- Continue tracking from the last known state
+- Maintain tracking history
 
 ## Configuration
 
