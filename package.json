@@ -1,7 +1,7 @@
 {
   "name": "counter-bot",
   "version": "1.0.0",
-  "description": "Discord Bot for Rust(the game)",
+  "description": "Rust Minicopter Crash Tracker Bot",
   "homepage": "https://github.com/Keymasterkid/CrashWatch#readme",
   "bugs": {
     "url": "https://github.com/Keymasterkid/CrashWatch/issues"
@@ -15,6 +15,11 @@
   "type": "commonjs",
   "main": "bot.js",
   "scripts": {
+    "start": "node bot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.1"
   }
 }
