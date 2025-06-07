@@ -1,7 +1,8 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
 const config = require('./config.js');
+const slashCommands = require('./slash-commands.js');
 
 const client = new Client({ 
     intents: [
@@ -16,7 +17,7 @@ const client = new Client({
 const CRASH_DATA_FILE = 'crash_data.json';
 
 // Track active trackers
-const activeTrackers = new Map();
+client.activeTrackers = new Map();
 
 function formatTime(seconds) {
     const days = Math.floor(seconds / 86400);
@@ -62,31 +63,8 @@ async function clearCrashData() {
     }
 }
 
-client.once('ready', async () => {
-    console.log(`Bot is ready! Logged in as ${client.user.tag}`);
-    console.log(`Using prefix: ${config.prefix}`);
-    console.log(`Tracker settings: Updates every ${config.tracker.updateInterval/1000} seconds, increments by ${config.tracker.incrementAmount} seconds`);
-
-    // Try to recover any existing crash data
-    const crashData = await loadCrashData();
-    if (crashData) {
-        console.log('Found existing crash data, attempting recovery...');
-        try {
-            const channel = await client.channels.fetch(crashData.channelId);
-            if (channel) {
-                const message = await channel.messages.fetch(crashData.messageId);
-                if (message) {
-                    console.log('Recovering crash tracker...');
-                    startTracker(channel, message, crashData.timeSinceLastCrash, crashData.lastCrashBy);
-                }
-            }
-        } catch (error) {
-            console.error('Error recovering crash tracker:', error.message);
-        }
-    }
-});
-
-function startTracker(channel, existingMessage = null, initialTime = 0, initialLastCrashBy = null) {
+// Move startTracker to be a client method
+client.startTracker = function(channel, existingMessage = null, initialTime = 0, initialLastCrashBy = null) {
     let timeSinceLastCrash = initialTime;
     let lastCrashBy = initialLastCrashBy;
     let retryCount = 0;
@@ -115,7 +93,7 @@ function startTracker(channel, existingMessage = null, initialTime = 0, initialL
             
             if (retryCount >= maxRetries) {
                 console.error('Max retries reached, stopping tracker');
-                stopTracker(channel.id);
+                this.stopTracker(channel.id);
                 try {
                     await message.edit(`🛩️ Minicopter Crash Tracker\nTracker stopped due to connection issues.\nLast known time: ${formatTime(timeSinceLastCrash)}`);
                 } catch (e) {
@@ -158,11 +136,11 @@ function startTracker(channel, existingMessage = null, initialTime = 0, initialL
 
             collector.on('end', () => {
                 clearInterval(interval);
-                activeTrackers.delete(channel.id);
+                this.activeTrackers.delete(channel.id);
             });
 
             // Store the tracker info
-            activeTrackers.set(channel.id, {
+            this.activeTrackers.set(channel.id, {
                 message: trackerMsg,
                 interval,
                 collector
@@ -175,37 +153,96 @@ function startTracker(channel, existingMessage = null, initialTime = 0, initialL
     };
 
     startTracking();
-}
+};
 
-function stopTracker(channelId) {
-    const tracker = activeTrackers.get(channelId);
+// Move stopTracker to be a client method
+client.stopTracker = function(channelId) {
+    const tracker = this.activeTrackers.get(channelId);
     if (tracker) {
         clearInterval(tracker.interval);
         tracker.collector.stop();
-        activeTrackers.delete(channelId);
+        this.activeTrackers.delete(channelId);
         // Clear the crash data when stopping the tracker
         clearCrashData();
         return true;
     }
     return false;
-}
+};
+
+client.once('ready', async () => {
+    console.log(`Bot is ready! Logged in as ${client.user.tag}`);
+    console.log(`Using prefix: ${config.prefix}`);
+    console.log(`Tracker settings: Updates every ${config.tracker.updateInterval/1000} seconds, increments by ${config.tracker.incrementAmount} seconds`);
+
+    // Register slash commands
+    try {
+        const rest = new REST({ version: '10' }).setToken(config.token);
+        console.log('Started refreshing application (/) commands.');
+
+        await rest.put(
+            Routes.applicationCommands(client.user.id),
+            { body: slashCommands.commands },
+        );
+
+        console.log('Successfully reloaded application (/) commands.');
+    } catch (error) {
+        console.error('Error registering slash commands:', error);
+    }
+
+    // Try to recover any existing crash data
+    const crashData = await loadCrashData();
+    if (crashData) {
+        console.log('Found existing crash data, attempting recovery...');
+        try {
+            const channel = await client.channels.fetch(crashData.channelId);
+            if (channel) {
+                const message = await channel.messages.fetch(crashData.messageId);
+                if (message) {
+                    console.log('Recovering crash tracker...');
+                    client.startTracker(channel, message, crashData.timeSinceLastCrash, crashData.lastCrashBy);
+                }
+            }
+        } catch (error) {
+            console.error('Error recovering crash tracker:', error.message);
+        }
+    }
+});
 
 client.on('messageCreate', async (message) => {
     console.log(`Received message: ${message.content}`);
     
     if (message.content === `${config.prefix}startTracker`) {
-        if (activeTrackers.has(message.channel.id)) {
+        if (client.activeTrackers.has(message.channel.id)) {
             message.reply('A tracker is already running in this channel. Use `!stopTracker` to stop it first.');
             return;
         }
         console.log('Starting Minicopter crash tracker...');
-        startTracker(message.channel);
+        client.startTracker(message.channel);
     } else if (message.content === `${config.prefix}stopTracker`) {
-        if (stopTracker(message.channel.id)) {
+        if (client.stopTracker(message.channel.id)) {
             message.reply('Tracker stopped successfully.');
         } else {
             message.reply('No active tracker found in this channel.');
         }
+    }
+});
+
+// Add slash command handler
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isCommand()) return;
+
+    try {
+        switch (interaction.commandName) {
+            case 'starttracker':
+                await slashCommands.startTracker(interaction);
+                break;
+            case 'stoptracker':
+                await slashCommands.stopTracker(interaction);
+                break;
+        }
+    } catch (error) {
+        console.error('Error handling slash command:', error);
+        await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
     }
 });
 

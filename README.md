@@ -11,6 +11,7 @@ A Discord bot that tracks Minicopter crashes in Rust. Created by BaseCode™ (ke
 - Continuous tracking until bot restart
 - Automatic crash recovery after bot restarts
 - Data persistence to maintain tracking state
+- Support for both prefix commands and slash commands
 
 ## Setup
 
@@ -51,8 +52,15 @@ npm start
 
 ## Usage
 
+### Prefix Commands
 - Start the tracker: `!startTracker`
 - Stop the tracker: `!stopTracker`
+
+### Slash Commands
+- Start the tracker: `/starttracker`
+- Stop the tracker: `/stoptracker`
+
+### Other Features
 - Report a crash: Click the 🔄 reaction on the tracker message
 - The tracker will continue running until stopped or the bot is restarted
 - After a bot restart, the tracker will automatically recover and continue from where it left off
