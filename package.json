@@ -1,0 +1,20 @@
+{
+  "name": "counter-bot",
+  "version": "1.0.0",
+  "description": "Discord Bot for Rust(the game)",
+  "homepage": "https://github.com/Keymasterkid/CrashWatch#readme",
+  "bugs": {
+    "url": "https://github.com/Keymasterkid/CrashWatch/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Keymasterkid/CrashWatch.git"
+  },
+  "license": "MIT",
+  "author": "BaseCode™ (keymasterkid)",
+  "type": "commonjs",
+  "main": "bot.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
