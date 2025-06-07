@@ -40,6 +40,8 @@ module.exports = {
 };
 ```
 
+> ⚠️ **IMPORTANT**: Never commit your `config.js` file to Git! It contains your bot token which should be kept private. The `config.js` file is already in `.gitignore` to prevent accidental commits.
+
 5. Start the bot:
 ```bash
 npm start

@@ -3,7 +3,13 @@ node_modules/
 package-lock.json
 
 # Environment variables
+.env
+
+# Configuration
 config.js
+config.local.js
+config.*.js
+!config.js.example
 
 # Logs
 logs

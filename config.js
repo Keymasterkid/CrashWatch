@@ -1,8 +1,0 @@
-module.exports = {
-    token: "ODQ5MTc5NjQ3NDAwODY5ODkw.G2Zm2m.lLq6EoGExWdoVlJw0-wKzSpLgonMyIhF7u_E8g",
-    prefix: "!",
-    tracker: {
-        updateInterval: 10000,  // How often to update (in milliseconds)
-        incrementAmount: 10     // How many seconds to add each update
-    }
-};
