@@ -42,16 +42,23 @@ module.exports = {
     commands,
     // Command handlers
     async startTracker(interaction) {
-        if (interaction.client.activeTrackers.has(interaction.channelId)) {
+        const guildId = interaction.guildId;
+        const channelId = interaction.channelId;
+
+        if (interaction.client.activeTrackers.has(guildId) && 
+            interaction.client.activeTrackers.get(guildId).has(channelId)) {
             await interaction.reply('A tracker is already running in this channel. Use `/stoptracker` to stop it first.');
             return;
         }
         await interaction.reply('Starting Minicopter crash tracker...');
-        interaction.client.startTracker(interaction.channel);
+        const success = await interaction.client.startTracker(interaction.channel);
+        if (!success) {
+            await interaction.followUp('Failed to start the tracker. Please try again later.');
+        }
     },
 
     async stopTracker(interaction) {
-        if (interaction.client.stopTracker(interaction.channelId)) {
+        if (interaction.client.stopTracker(interaction.guildId, interaction.channelId)) {
             await interaction.reply('Tracker stopped successfully.');
         } else {
             await interaction.reply('No active tracker found in this channel.');
@@ -59,7 +66,11 @@ module.exports = {
     },
 
     async startFromTime(interaction) {
-        if (interaction.client.activeTrackers.has(interaction.channelId)) {
+        const guildId = interaction.guildId;
+        const channelId = interaction.channelId;
+
+        if (interaction.client.activeTrackers.has(guildId) && 
+            interaction.client.activeTrackers.get(guildId).has(channelId)) {
             await interaction.reply('A tracker is already running in this channel. Use `/stoptracker` to stop it first.');
             return;
         }
@@ -100,6 +111,9 @@ module.exports = {
         const formattedTime = format(targetDate, 'h:mm a');
 
         await interaction.reply(`Starting Minicopter crash tracker from ${formattedTime} ${timezone}...`);
-        interaction.client.startTracker(interaction.channel, null, timeSinceCrash);
+        const success = await interaction.client.startTracker(interaction.channel, null, timeSinceCrash);
+        if (!success) {
+            await interaction.followUp('Failed to start the tracker. Please try again later.');
+        }
     }
 }; 

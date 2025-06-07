@@ -12,6 +12,9 @@ A Discord bot that tracks Minicopter crashes in Rust. Created by BaseCode™ (ke
 - Automatic crash recovery after bot restarts
 - Data persistence to maintain tracking state
 - Support for both prefix commands and slash commands
+- Multi-server and multi-channel support
+- Automatic backup system for crash data
+- Timezone support for crash reporting
 
 ## Setup
 
@@ -78,18 +81,34 @@ Available timezones:
 - The tracker will continue running until stopped or the bot is restarted
 - After a bot restart, the tracker will automatically recover and continue from where it left off
 
-## Data Persistence
+## Multi-Server Support
+
+The bot now supports multiple servers and channels:
+- Run multiple trackers in different channels
+- Each channel maintains its own independent tracking
+- Trackers can be started and stopped independently
+- All trackers are automatically recovered after bot restart
+
+## Data Persistence and Backup
 
 The bot automatically saves its state to `crash_data.json`, which includes:
-- Current tracking time
-- Last crash reporter
+- Current tracking time for each channel
+- Last crash reporter for each channel
 - Channel and message information
 - Last update timestamp
+
+The backup system:
+- Creates automatic backups before saving new data
+- Maintains a backup file (`crash_data.json.backup`)
+- Recovers from backup if the main file is corrupted
+- Preserves data across bot restarts and crashes
 
 This allows the bot to:
 - Recover after crashes or restarts
 - Continue tracking from the last known state
 - Maintain tracking history
+- Handle multiple servers and channels
+- Protect against data corruption
 
 ## Configuration
 

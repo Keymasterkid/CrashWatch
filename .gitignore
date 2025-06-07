@@ -13,6 +13,7 @@ config.*.js
 
 # Data files
 crash_data.json
+crash_data.json.backup
 
 # Logs
 logs
@@ -33,4 +34,9 @@ pids
 
 # OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
