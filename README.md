@@ -59,6 +59,19 @@ npm start
 ### Slash Commands
 - Start the tracker: `/starttracker`
 - Stop the tracker: `/stoptracker`
+- Start from specific time: `/startfromtime time:2:30pm timezone:Pacific Time (PT)` (Use 12-hour format and select your timezone)
+
+Available timezones:
+- Pacific Time (PT)
+- Mountain Time (MT)
+- Central Time (CT)
+- Eastern Time (ET)
+- Atlantic Time (AT)
+- Greenwich Mean Time (GMT)
+- Central European Time (CET)
+- Eastern European Time (EET)
+- Australian Eastern Time (AET)
+- Japan Standard Time (JST)
 
 ### Other Features
 - Report a crash: Click the 🔄 reaction on the tracker message

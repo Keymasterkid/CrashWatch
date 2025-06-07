@@ -194,16 +194,32 @@ client.once('ready', async () => {
     if (crashData) {
         console.log('Found existing crash data, attempting recovery...');
         try {
-            const channel = await client.channels.fetch(crashData.channelId);
-            if (channel) {
-                const message = await channel.messages.fetch(crashData.messageId);
-                if (message) {
-                    console.log('Recovering crash tracker...');
-                    client.startTracker(channel, message, crashData.timeSinceLastCrash, crashData.lastCrashBy);
-                }
+            const channel = await client.channels.fetch(crashData.channelId).catch(() => null);
+            if (!channel) {
+                console.log('Could not find the channel for recovery. Clearing crash data.');
+                await clearCrashData();
+                return;
+            }
+
+            // Try to fetch the message, but don't throw if it's not found
+            const message = await channel.messages.fetch(crashData.messageId).catch(() => null);
+            
+            if (message) {
+                console.log('Recovering crash tracker...');
+                client.startTracker(channel, message, crashData.timeSinceLastCrash, crashData.lastCrashBy);
+            } else {
+                console.log('Original tracker message not found. Creating new tracker...');
+                // Calculate time elapsed since last update
+                const timeElapsed = Math.floor((Date.now() - crashData.lastUpdate) / 1000);
+                const newTimeSinceCrash = crashData.timeSinceLastCrash + timeElapsed;
+                
+                // Start a new tracker with the updated time
+                client.startTracker(channel, null, newTimeSinceCrash, crashData.lastCrashBy);
             }
         } catch (error) {
-            console.error('Error recovering crash tracker:', error.message);
+            console.error('Error during recovery:', error.message);
+            // Clear the crash data if recovery fails
+            await clearCrashData();
         }
     }
 });
@@ -238,6 +254,9 @@ client.on('interactionCreate', async interaction => {
                 break;
             case 'stoptracker':
                 await slashCommands.stopTracker(interaction);
+                break;
+            case 'startfromtime':
+                await slashCommands.startFromTime(interaction);
                 break;
         }
     } catch (error) {
