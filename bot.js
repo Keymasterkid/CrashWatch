@@ -332,12 +332,15 @@ async function registerSlashCommands(guildId = null) {
             );
             console.log(`Successfully registered commands for guild ${guildId}`);
         } else {
-            // Register global commands
-            await rest.put(
-                Routes.applicationCommands(client.user.id),
-                { body: slashCommands.commands },
-            );
-            console.log('Successfully registered global commands');
+            // Register commands for all current guilds
+            const guilds = client.guilds.cache;
+            for (const [id, guild] of guilds) {
+                await rest.put(
+                    Routes.applicationGuildCommands(client.user.id, id),
+                    { body: slashCommands.commands },
+                );
+                console.log(`Successfully registered commands for guild ${guild.name} (${id})`);
+            }
         }
     } catch (error) {
         console.error('Error registering slash commands:', error);
@@ -349,7 +352,7 @@ client.once('ready', async () => {
     console.log(`Using prefix: ${config.prefix}`);
     console.log(`Tracker settings: Updates every ${config.tracker.updateInterval/1000} seconds, increments by ${config.tracker.incrementAmount} seconds`);
 
-    // Register global slash commands
+    // Register commands for all current guilds
     await registerSlashCommands();
 
     // Try to recover any existing crash data
