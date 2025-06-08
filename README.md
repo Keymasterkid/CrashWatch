@@ -42,6 +42,7 @@ cp config.js.example config.js
 ```javascript
 module.exports = {
     token: "your_discord_bot_token",
+    clientId: "your_client_id_here",  // Your bot's client ID
     prefix: "!",  // Command prefix
     tracker: {
         updateInterval: 10000,  // How often to update (in milliseconds)
@@ -66,7 +67,9 @@ npm start
 ### Slash Commands
 - Start the tracker: `/starttracker`
 - Stop the tracker: `/stoptracker`
-- Start from specific time: `/startfromtime time:2:30pm timezone:Pacific Time (PT)` (Use 12-hour format and select your timezone)
+- Start from specific time: 
+  - Basic: `/startfromtime time:2:30pm timezone:Pacific Time (PT)`
+  - With date: `/startfromtime time:2:30pm timezone:Pacific Time (PT) date:5/7`
 
 Available timezones:
 - Pacific Time (PT)
@@ -137,6 +140,7 @@ The bot handles offline scenarios gracefully:
 You can customize the bot's behavior in `config.js`:
 
 - `token`: Your Discord bot token
+- `clientId`: Your bot's client ID
 - `prefix`: Command prefix (default: "!")
 - `tracker.updateInterval`: How often the tracker updates (in milliseconds)
 - `tracker.incrementAmount`: How many seconds to add each update

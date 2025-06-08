@@ -35,7 +35,11 @@ const commands = [
             option.setName('timezone')
                 .setDescription('Your timezone')
                 .setRequired(true)
-                .addChoices(...TIMEZONES)),
+                .addChoices(...TIMEZONES))
+        .addStringOption(option =>
+            option.setName('date')
+                .setDescription('Optional date in MM/DD format (e.g., 5/7 for May 7th)')
+                .setRequired(false)),
 ].map(command => command.toJSON());
 
 module.exports = {
@@ -76,6 +80,7 @@ module.exports = {
         }
 
         const timeStr = interaction.options.getString('time');
+        const dateStr = interaction.options.getString('date');
         const timezone = interaction.options.getString('timezone');
         const timeRegex = /^(\d{1,2}):(\d{2})([ap]m)$/i;
         const match = timeStr.match(timeRegex);
@@ -96,21 +101,34 @@ module.exports = {
             hours = 0;
         }
 
-        // Create a date object for today with the specified time
+        // Create a date object
         const now = new Date();
-        const targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
+        let targetDate;
 
-        // If the target time is in the future, assume it's for yesterday
-        if (targetDate > now) {
-            targetDate.setDate(targetDate.getDate() - 1);
+        if (dateStr) {
+            // Parse the date string (MM/DD format)
+            const [month, day] = dateStr.split('/').map(num => parseInt(num));
+            if (isNaN(month) || isNaN(day) || month < 1 || month > 12 || day < 1 || day > 31) {
+                await interaction.reply('Invalid date format. Please use MM/DD format (e.g., 5/7 for May 7th).');
+                return;
+            }
+            targetDate = new Date(now.getFullYear(), month - 1, day, hours, minutes, 0, 0);
+        } else {
+            // Use today's date
+            targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
+            // If the target time is in the future, assume it's for yesterday
+            if (targetDate > now) {
+                targetDate.setDate(targetDate.getDate() - 1);
+            }
         }
 
         const timeSinceCrash = Math.floor((now - targetDate) / 1000);
         
-        // Format the time for display
+        // Format the time and date for display
+        const formattedDate = format(targetDate, 'MM/dd');
         const formattedTime = format(targetDate, 'h:mm a');
 
-        await interaction.reply(`Starting Minicopter crash tracker from ${formattedTime} ${timezone}...`);
+        await interaction.reply(`Starting Minicopter crash tracker from ${formattedTime} ${formattedDate} ${timezone}...`);
         const success = await interaction.client.startTracker(interaction.channel, null, timeSinceCrash);
         if (!success) {
             await interaction.followUp('Failed to start the tracker. Please try again later.');
