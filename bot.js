@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, EmbedBuilder } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
 const config = require('./config.js');
@@ -110,10 +110,29 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
     
     const updateMessage = async (message) => {
         try {
-            const messageContent = lastCrashBy 
-                ? `🛩️ Minicopter Crash Tracker\nTime since last crash: ${formatTime(timeSinceLastCrash)}\nLast crash reported by: ${lastCrashBy}`
-                : `🛩️ Minicopter Crash Tracker\nTime since last crash: ${formatTime(timeSinceLastCrash)}`;
-            await message.edit(messageContent);
+            const embed = new EmbedBuilder()
+                .setColor('#2b2d31')  // Dark modern color
+                .setTitle('🛩️ Minicopter Crash Tracker')
+                .setDescription(`**Time since last crash:**\n\`\`\`ansi\n${formatTime(timeSinceLastCrash)}\`\`\``)
+                .addFields(
+                    { name: '📊 Status', value: '```Active```', inline: true },
+                    { name: '⏰ Last Update', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
+                )
+                .setFooter({ 
+                    text: 'Click 🔄 to report a crash', 
+                    iconURL: 'https://i.imgur.com/AfFp7pu.png'  // Discord logo
+                })
+                .setTimestamp();
+
+            if (lastCrashBy) {
+                embed.addFields({ 
+                    name: '👤 Last Crash Reporter', 
+                    value: `\`\`\`${lastCrashBy}\`\`\``,
+                    inline: false 
+                });
+            }
+
+            await message.edit({ embeds: [embed] });
             retryCount = 0;
             
             // Save current state
@@ -125,7 +144,8 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
                 messageId: message.id,
                 timeSinceLastCrash,
                 lastCrashBy,
-                lastUpdate: Date.now()
+                lastUpdate: Date.now(),
+                status: 'Active'
             };
             await saveCrashData(crashData);
         } catch (error) {
@@ -136,7 +156,24 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
                 console.error('Max retries reached, stopping tracker');
                 this.stopTracker(guildId, channelId);
                 try {
-                    await message.edit(`🛩️ Minicopter Crash Tracker\nTracker stopped due to connection issues.\nLast known time: ${formatTime(timeSinceLastCrash)}`);
+                    const errorType = error.name || 'Unknown Error';
+                    const errorEmbed = new EmbedBuilder()
+                        .setColor('#ed4245')  // Discord error red
+                        .setTitle('⚠️ Tracker Error')
+                        .setDescription(`**Connection Error**\n\nLast known time:\n\`\`\`ansi\n${formatTime(timeSinceLastCrash)}\`\`\``)
+                        .addFields(
+                            { name: '📊 Status', value: '```Error```', inline: true },
+                            { name: '⏰ Last Update', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
+                            { name: '❌ Error Type', value: `\`\`\`${errorType}\`\`\``, inline: true },
+                            { name: '🔍 Error Details', value: `\`\`\`${error.message}\`\`\``, inline: false },
+                            { name: '🔄 Retry Count', value: `\`\`\`${retryCount}/${maxRetries}\`\`\``, inline: true }
+                        )
+                        .setFooter({ 
+                            text: 'Please restart the tracker', 
+                            iconURL: 'https://i.imgur.com/AfFp7pu.png'
+                        })
+                        .setTimestamp();
+                    await message.edit({ embeds: [errorEmbed] });
                 } catch (e) {
                     console.error('Could not send final message:', e.message);
                 }
@@ -151,7 +188,21 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
                 trackerMsg = existingMessage;
                 await updateMessage(trackerMsg);
             } else {
-                trackerMsg = await channel.send(`🛩️ Minicopter Crash Tracker\nTime since last crash: ${formatTime(timeSinceLastCrash)}`);
+                const initialEmbed = new EmbedBuilder()
+                    .setColor('#2b2d31')
+                    .setTitle('🛩️ Minicopter Crash Tracker')
+                    .setDescription(`**Time since last crash:**\n\`\`\`ansi\n${formatTime(timeSinceLastCrash)}\`\`\``)
+                    .addFields(
+                        { name: '📊 Status', value: '```Active```', inline: true },
+                        { name: '⏰ Last Update', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
+                    )
+                    .setFooter({ 
+                        text: 'Click 🔄 to report a crash', 
+                        iconURL: 'https://i.imgur.com/AfFp7pu.png'
+                    })
+                    .setTimestamp();
+
+                trackerMsg = await channel.send({ embeds: [initialEmbed] });
                 await trackerMsg.react('🔄');
             }
 
@@ -196,7 +247,23 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
             return true;
         } catch (error) {
             console.error('Error starting tracker:', error.message);
-            channel.send('Failed to start Minicopter crash tracker. Please try again later.');
+            const errorType = error.name || 'Unknown Error';
+            const errorEmbed = new EmbedBuilder()
+                .setColor('#ed4245')
+                .setTitle('⚠️ Error')
+                .setDescription('**Failed to start Minicopter crash tracker**')
+                .addFields(
+                    { name: '📊 Status', value: '```Error```', inline: true },
+                    { name: '⏰ Time', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
+                    { name: '❌ Error Type', value: `\`\`\`${errorType}\`\`\``, inline: true },
+                    { name: '🔍 Error Details', value: `\`\`\`${error.message}\`\`\``, inline: false }
+                )
+                .setFooter({ 
+                    text: 'Please try again', 
+                    iconURL: 'https://i.imgur.com/AfFp7pu.png'
+                })
+                .setTimestamp();
+            channel.send({ embeds: [errorEmbed] });
             return false;
         }
     };
@@ -205,7 +272,7 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
 };
 
 // Move stopTracker to be a client method
-client.stopTracker = function(guildId, channelId) {
+client.stopTracker = async function(guildId, channelId) {
     const guildTrackers = this.activeTrackers.get(guildId);
     if (!guildTrackers) return false;
 
@@ -218,6 +285,21 @@ client.stopTracker = function(guildId, channelId) {
         // Clean up empty guild maps
         if (guildTrackers.size === 0) {
             this.activeTrackers.delete(guildId);
+        }
+
+        // Update the message to show stopped status
+        try {
+            const message = tracker.message;
+            const embed = EmbedBuilder.from(message.embeds[0])
+                .setDescription(`**Time since last crash:**\n\`\`\`ansi\n${message.embeds[0].description.split('```ansi\n')[1].split('```')[0]}\`\`\``)
+                .spliceFields(0, 1, { name: '📊 Status', value: '```Inactive```', inline: true })
+                .setFooter({ 
+                    text: 'Tracker is stopped', 
+                    iconURL: 'https://i.imgur.com/AfFp7pu.png'
+                });
+            await message.edit({ embeds: [embed] });
+        } catch (error) {
+            console.error('Error updating message status:', error.message);
         }
 
         // Update crash data
@@ -236,25 +318,39 @@ client.stopTracker = function(guildId, channelId) {
     return false;
 };
 
+// Function to register slash commands
+async function registerSlashCommands(guildId = null) {
+    try {
+        const rest = new REST({ version: '10' }).setToken(config.token);
+        console.log('Started refreshing application (/) commands.');
+
+        if (guildId) {
+            // Register commands for specific guild
+            await rest.put(
+                Routes.applicationGuildCommands(client.user.id, guildId),
+                { body: slashCommands.commands },
+            );
+            console.log(`Successfully registered commands for guild ${guildId}`);
+        } else {
+            // Register global commands
+            await rest.put(
+                Routes.applicationCommands(client.user.id),
+                { body: slashCommands.commands },
+            );
+            console.log('Successfully registered global commands');
+        }
+    } catch (error) {
+        console.error('Error registering slash commands:', error);
+    }
+}
+
 client.once('ready', async () => {
     console.log(`Bot is ready! Logged in as ${client.user.tag}`);
     console.log(`Using prefix: ${config.prefix}`);
     console.log(`Tracker settings: Updates every ${config.tracker.updateInterval/1000} seconds, increments by ${config.tracker.incrementAmount} seconds`);
 
-    // Register slash commands
-    try {
-        const rest = new REST({ version: '10' }).setToken(config.token);
-        console.log('Started refreshing application (/) commands.');
-
-        await rest.put(
-            Routes.applicationCommands(client.user.id),
-            { body: slashCommands.commands },
-        );
-
-        console.log('Successfully reloaded application (/) commands.');
-    } catch (error) {
-        console.error('Error registering slash commands:', error);
-    }
+    // Register global slash commands
+    await registerSlashCommands();
 
     // Try to recover any existing crash data
     const crashData = await loadCrashData();
@@ -276,15 +372,21 @@ client.once('ready', async () => {
                         continue;
                     }
 
+                    // Calculate time elapsed since last update
+                    const timeElapsed = Math.floor((Date.now() - data.lastUpdate) / 1000);
+                    const newTimeSinceCrash = data.timeSinceLastCrash + timeElapsed;
+                    
+                    console.log(`Recovering tracker in guild ${guildId}, channel ${channelId}`);
+                    console.log(`Time elapsed while offline: ${formatTime(timeElapsed)}`);
+                    console.log(`New total time: ${formatTime(newTimeSinceCrash)}`);
+
                     const message = await channel.messages.fetch(data.messageId).catch(() => null);
                     
                     if (message) {
-                        console.log(`Recovering crash tracker in guild ${guildId}, channel ${channelId}...`);
-                        client.startTracker(channel, message, data.timeSinceLastCrash, data.lastCrashBy);
+                        console.log(`Recovering existing message...`);
+                        client.startTracker(channel, message, newTimeSinceCrash, data.lastCrashBy);
                     } else {
-                        console.log(`Original tracker message not found in guild ${guildId}, channel ${channelId}. Creating new tracker...`);
-                        const timeElapsed = Math.floor((Date.now() - data.lastUpdate) / 1000);
-                        const newTimeSinceCrash = data.timeSinceLastCrash + timeElapsed;
+                        console.log(`Creating new tracker message...`);
                         client.startTracker(channel, null, newTimeSinceCrash, data.lastCrashBy);
                     }
                 } catch (error) {
@@ -293,6 +395,12 @@ client.once('ready', async () => {
             }
         }
     }
+});
+
+// Handle new guild joins
+client.on('guildCreate', async (guild) => {
+    console.log(`Joined new guild: ${guild.name} (${guild.id})`);
+    await registerSlashCommands(guild.id);
 });
 
 client.on('messageCreate', async (message) => {
@@ -351,8 +459,89 @@ client.on('error', error => {
     console.error('Discord client error:', error.message);
 });
 
-client.on('disconnect', () => {
+// Function to update all trackers to offline status
+async function updateAllTrackersToOffline(reason = 'Bot is offline') {
+    console.log('Updating all trackers to offline status...');
+    
+    for (const [guildId, guildTrackers] of client.activeTrackers) {
+        for (const [channelId, tracker] of guildTrackers) {
+            try {
+                const message = tracker.message;
+                if (message && message.embeds[0]) {
+                    const currentTime = message.embeds[0].description.split('```ansi\n')[1].split('```')[0];
+                    const lastCrashByField = message.embeds[0].fields.find(f => f.name === '👤 Last Crash Reporter');
+                    const lastCrashBy = lastCrashByField ? lastCrashByField.value.replace(/```/g, '') : null;
+                    
+                    const offlineEmbed = new EmbedBuilder()
+                        .setColor('#747f8d')  // Discord offline gray
+                        .setTitle('🛩️ Minicopter Crash Tracker')
+                        .setDescription(`**Time since last crash:**\n\`\`\`ansi\n${currentTime}\`\`\``)
+                        .addFields(
+                            { name: '📊 Status', value: '```Offline```', inline: true },
+                            { name: '⏰ Last Update', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
+                        )
+                        .setFooter({ 
+                            text: reason, 
+                            iconURL: 'https://i.imgur.com/AfFp7pu.png'
+                        })
+                        .setTimestamp();
+
+                    if (lastCrashBy) {
+                        offlineEmbed.addFields({ 
+                            name: '👤 Last Crash Reporter', 
+                            value: `\`\`\`${lastCrashBy}\`\`\``,
+                            inline: false 
+                        });
+                    }
+
+                    await message.edit({ embeds: [offlineEmbed] });
+                }
+            } catch (error) {
+                console.error(`Error updating tracker in guild ${guildId}, channel ${channelId}:`, error.message);
+            }
+        }
+    }
+}
+
+// Handle graceful shutdown
+process.on('SIGINT', async () => {
+    console.log('\nGracefully shutting down...');
+    await updateAllTrackersToOffline('Bot is shutting down');
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    console.log('\nReceived SIGTERM signal');
+    await updateAllTrackersToOffline('Bot is shutting down');
+    process.exit(0);
+});
+
+// Handle disconnects
+client.on('disconnect', async () => {
     console.log('Bot disconnected from Discord');
+    await updateAllTrackersToOffline('Bot is offline');
+    
+    // Save current state before disconnect
+    client.activeTrackers.forEach((guildTrackers, guildId) => {
+        guildTrackers.forEach((tracker, channelId) => {
+            const message = tracker.message;
+            if (message && message.embeds[0]) {
+                const timeSinceLastCrash = parseInt(message.embeds[0].description.split('```ansi\n')[1].split('```')[0]);
+                const lastCrashBy = message.embeds[0].fields.find(f => f.name === '👤 Last Crash Reporter')?.value;
+                
+                loadCrashData().then(crashData => {
+                    if (!crashData[guildId]) crashData[guildId] = {};
+                    crashData[guildId][channelId] = {
+                        messageId: message.id,
+                        timeSinceLastCrash,
+                        lastCrashBy,
+                        lastUpdate: Date.now()
+                    };
+                    saveCrashData(crashData);
+                });
+            }
+        });
+    });
 });
 
 client.on('reconnecting', () => {

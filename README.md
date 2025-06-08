@@ -15,6 +15,10 @@ A Discord bot that tracks Minicopter crashes in Rust. Created by BaseCode™ (ke
 - Multi-server and multi-channel support
 - Automatic backup system for crash data
 - Timezone support for crash reporting
+- Beautiful embed messages with status indicators
+- Automatic command registration for new servers
+- Offline time tracking and recovery
+- Graceful shutdown handling
 
 ## Setup
 
@@ -80,6 +84,9 @@ Available timezones:
 - Report a crash: Click the 🔄 reaction on the tracker message
 - The tracker will continue running until stopped or the bot is restarted
 - After a bot restart, the tracker will automatically recover and continue from where it left off
+- Commands are automatically registered when the bot joins new servers
+- Tracker status is shown in the embed (Active/Inactive/Error)
+- Offline time is automatically tracked and added when the bot reconnects
 
 ## Multi-Server Support
 
@@ -88,6 +95,8 @@ The bot now supports multiple servers and channels:
 - Each channel maintains its own independent tracking
 - Trackers can be started and stopped independently
 - All trackers are automatically recovered after bot restart
+- Commands are automatically registered for new servers
+- Each server maintains its own crash data
 
 ## Data Persistence and Backup
 
@@ -96,19 +105,32 @@ The bot automatically saves its state to `crash_data.json`, which includes:
 - Last crash reporter for each channel
 - Channel and message information
 - Last update timestamp
+- Tracker status
 
 The backup system:
 - Creates automatic backups before saving new data
 - Maintains a backup file (`crash_data.json.backup`)
 - Recovers from backup if the main file is corrupted
 - Preserves data across bot restarts and crashes
+- Handles offline time tracking
 
-This allows the bot to:
-- Recover after crashes or restarts
-- Continue tracking from the last known state
-- Maintain tracking history
-- Handle multiple servers and channels
-- Protect against data corruption
+## Status Indicators
+
+The tracker shows different statuses:
+- **Active**: Tracker is running normally
+- **Inactive**: Tracker has been stopped
+- **Offline**: Bot is offline or shutting down
+- **Error**: An error has occurred
+
+## Offline Handling
+
+The bot handles offline scenarios gracefully:
+- Tracks time while offline
+- Updates status to show offline state
+- Preserves all tracking data
+- Recovers automatically when back online
+- Shows detailed error information if needed
+- Handles graceful shutdowns (Ctrl+C)
 
 ## Configuration
 
