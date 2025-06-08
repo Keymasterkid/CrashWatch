@@ -20,6 +20,22 @@ A Discord bot that tracks Minicopter crashes in Rust. Created by BaseCode™ (ke
 - Offline time tracking and recovery
 - Graceful shutdown handling
 
+## Required Permissions
+
+The bot requires the following permissions to function properly:
+- Send Messages
+- Read Message History
+- Add Reactions
+- Use External Emojis
+- Embed Links
+- Attach Files
+- Read Messages/View Channels
+
+To ensure the bot has these permissions:
+1. When inviting the bot to your server, use the OAuth2 URL with the required permissions
+2. Make sure the bot's role has these permissions in the channel where you want to use it
+3. Check that the bot's role is not being overridden by channel-specific permissions
+
 ## Setup
 
 1. Clone the repository:
