@@ -4,6 +4,9 @@ const path = require('path');
 const config = require('./config.js');
 const slashCommands = require('./slash-commands.js');
 
+// Bot version
+const VERSION = '1.0.0';
+
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds,
@@ -107,20 +110,22 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
     let retryCount = 0;
     const maxRetries = 3;
     let interval;
+    let collector;
     
     const updateMessage = async (message) => {
         try {
             const embed = new EmbedBuilder()
-                .setColor('#2b2d31')  // Dark modern color
+                .setColor('#2b2d31')
                 .setTitle('🛩️ Minicopter Crash Tracker')
                 .setDescription(`**Time since last crash:**\n\`\`\`ansi\n${formatTime(timeSinceLastCrash)}\`\`\``)
                 .addFields(
                     { name: '📊 Status', value: '```Active```', inline: true },
-                    { name: '⏰ Last Update', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
+                    { name: '⏰ Last Update', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
+                    { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true }
                 )
                 .setFooter({ 
                     text: 'Click 🔄 to report a crash', 
-                    iconURL: 'https://i.imgur.com/AfFp7pu.png'  // Discord logo
+                    iconURL: 'https://i.imgur.com/AfFp7pu.png'
                 })
                 .setTimestamp();
 
@@ -145,7 +150,8 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
                 timeSinceLastCrash,
                 lastCrashBy,
                 lastUpdate: Date.now(),
-                status: 'Active'
+                status: 'Active',
+                version: VERSION
             };
             await saveCrashData(crashData);
         } catch (error) {
@@ -154,11 +160,11 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
             
             if (retryCount >= maxRetries) {
                 console.error('Max retries reached, stopping tracker');
-                this.stopTracker(guildId, channelId);
+                await this.stopTracker(guildId, channelId);
                 try {
                     const errorType = error.name || 'Unknown Error';
                     const errorEmbed = new EmbedBuilder()
-                        .setColor('#ed4245')  // Discord error red
+                        .setColor('#ed4245')
                         .setTitle('⚠️ Tracker Error')
                         .setDescription(`**Connection Error**\n\nLast known time:\n\`\`\`ansi\n${formatTime(timeSinceLastCrash)}\`\`\``)
                         .addFields(
@@ -194,7 +200,8 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
                     .setDescription(`**Time since last crash:**\n\`\`\`ansi\n${formatTime(timeSinceLastCrash)}\`\`\``)
                     .addFields(
                         { name: '📊 Status', value: '```Active```', inline: true },
-                        { name: '⏰ Last Update', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
+                        { name: '⏰ Last Update', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
+                        { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true }
                     )
                     .setFooter({ 
                         text: 'Click 🔄 to report a crash', 
@@ -212,7 +219,7 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
             }, config.tracker.updateInterval);
 
             const filter = (reaction, user) => reaction.emoji.name === '🔄' && !user.bot;
-            const collector = trackerMsg.createReactionCollector({ filter });
+            collector = trackerMsg.createReactionCollector({ filter });
 
             collector.on('collect', async (reaction, user) => {
                 console.log(`Crash reported by ${user.tag}`);
@@ -220,7 +227,10 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
                 lastCrashBy = user.tag;
                 try {
                     await updateMessage(trackerMsg);
-                    await reaction.users.remove(user.id);
+                    // Check if bot has permission to remove reactions
+                    if (channel.permissionsFor(this.user).has('ManageMessages')) {
+                        await reaction.users.remove(user.id);
+                    }
                 } catch (error) {
                     console.error('Error updating crash report:', error.message);
                 }
@@ -279,7 +289,9 @@ client.stopTracker = async function(guildId, channelId) {
     const tracker = guildTrackers.get(channelId);
     if (tracker) {
         clearInterval(tracker.interval);
-        tracker.collector.stop();
+        if (tracker.collector) {
+            tracker.collector.stop();
+        }
         guildTrackers.delete(channelId);
         
         // Clean up empty guild maps
@@ -303,23 +315,27 @@ client.stopTracker = async function(guildId, channelId) {
         }
 
         // Update crash data
-        loadCrashData().then(crashData => {
+        try {
+            const crashData = await loadCrashData();
             if (crashData && crashData[guildId]) {
                 delete crashData[guildId][channelId];
                 if (Object.keys(crashData[guildId]).length === 0) {
                     delete crashData[guildId];
                 }
-                saveCrashData(crashData);
+                await saveCrashData(crashData);
             }
-        });
+        } catch (error) {
+            console.error('Error updating crash data:', error.message);
+        }
 
         return true;
     }
     return false;
 };
 
-// Function to register slash commands
-async function registerSlashCommands(guildId = null) {
+// Function to register slash commands with retry mechanism
+async function registerSlashCommands(guildId = null, retryCount = 0) {
+    const maxRetries = 3;
     try {
         const rest = new REST({ version: '10' }).setToken(config.token);
         console.log('Started refreshing application (/) commands.');
@@ -344,6 +360,13 @@ async function registerSlashCommands(guildId = null) {
         }
     } catch (error) {
         console.error('Error registering slash commands:', error);
+        if (retryCount < maxRetries) {
+            console.log(`Retrying command registration (attempt ${retryCount + 1}/${maxRetries})...`);
+            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds before retry
+            return registerSlashCommands(guildId, retryCount + 1);
+        } else {
+            console.error('Max retries reached for command registration');
+        }
     }
 }
 
@@ -481,7 +504,8 @@ async function updateAllTrackersToOffline(reason = 'Bot is offline') {
                         .setDescription(`**Time since last crash:**\n\`\`\`ansi\n${currentTime}\`\`\``)
                         .addFields(
                             { name: '📊 Status', value: '```Offline```', inline: true },
-                            { name: '⏰ Last Update', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
+                            { name: '⏰ Last Update', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
+                            { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true }
                         )
                         .setFooter({ 
                             text: reason, 

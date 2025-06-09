@@ -23,7 +23,8 @@ const REQUIRED_PERMISSIONS = [
     'UseExternalEmojis',
     'EmbedLinks',
     'AttachFiles',
-    'ViewChannel'
+    'ViewChannel',
+    'ManageMessages'  // Added for message deletion
 ];
 
 // Helper function to check permissions
@@ -40,6 +41,17 @@ async function checkPermissions(interaction) {
         return false;
     }
     return true;
+}
+
+// Helper function to validate timezone
+function isValidTimezone(timezone) {
+    // Check if the timezone is in our list
+    return TIMEZONES.some(tz => tz.value === timezone);
+}
+
+// Helper function to validate date
+function isValidDate(date) {
+    return date instanceof Date && !isNaN(date);
 }
 
 const commands = [
@@ -141,6 +153,15 @@ module.exports = {
             const timeStr = interaction.options.getString('time');
             const dateStr = interaction.options.getString('date');
             const timezone = interaction.options.getString('timezone');
+
+            // Validate timezone
+            if (!isValidTimezone(timezone)) {
+                return await interaction.reply({
+                    content: '❌ Invalid timezone provided. Please select a valid timezone from the list.',
+                    ephemeral: true
+                });
+            }
+
             const timeRegex = /^(\d{1,2}):(\d{2})([ap]m)$/i;
             const match = timeStr.match(timeRegex);
 
@@ -154,6 +175,14 @@ module.exports = {
             let [_, hours, minutes, meridiem] = match;
             hours = parseInt(hours);
             minutes = parseInt(minutes);
+
+            // Validate hours and minutes
+            if (hours < 1 || hours > 12 || minutes < 0 || minutes > 59) {
+                return await interaction.reply({
+                    content: '❌ Invalid time values. Hours must be 1-12 and minutes must be 0-59.',
+                    ephemeral: true
+                });
+            }
 
             // Convert to 24-hour format
             if (meridiem.toLowerCase() === 'pm' && hours !== 12) {
@@ -179,10 +208,22 @@ module.exports = {
             } else {
                 // Use today's date
                 targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
-                // If the target time is in the future, assume it's for yesterday
-                if (targetDate > now) {
-                    targetDate.setDate(targetDate.getDate() - 1);
-                }
+            }
+
+            // Validate the final date
+            if (!isValidDate(targetDate)) {
+                return await interaction.reply({
+                    content: '❌ Invalid date/time combination. Please check your input.',
+                    ephemeral: true
+                });
+            }
+
+            // Check if date is in the future
+            if (targetDate > now) {
+                return await interaction.reply({
+                    content: '❌ Cannot start tracker from a future time. Please provide a past time.',
+                    ephemeral: true
+                });
             }
 
             const timeSinceCrash = Math.floor((now - targetDate) / 1000);
