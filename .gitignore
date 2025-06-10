@@ -40,3 +40,12 @@ pids
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Database files
+*.db
+*.db-journal
+data/
+
+# Backup files
+*.migration_backup
+*.backup

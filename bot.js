@@ -1,11 +1,12 @@
-const { Client, GatewayIntentBits, REST, Routes, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, EmbedBuilder, Collection } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
 const config = require('./config.js');
 const slashCommands = require('./slash-commands.js');
+const db = require('./database.js');
 
 // Bot version
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 
 const client = new Client({ 
     intents: [
@@ -16,12 +17,12 @@ const client = new Client({
     ]
 });
 
-// File to store crash data
-const CRASH_DATA_FILE = 'crash_data.json';
-
 // Track active trackers
 // Structure: Map<guildId, Map<channelId, tracker>>
 client.activeTrackers = new Map();
+
+// Add rate limit handling
+client.rateLimits = new Collection();
 
 function formatTime(seconds) {
     const days = Math.floor(seconds / 86400);
@@ -38,62 +39,166 @@ function formatTime(seconds) {
     return timeString;
 }
 
+// Remove old file-based functions and replace with db calls
 async function saveCrashData(data) {
-    try {
-        // Create a backup of the current data before saving
-        try {
-            const currentData = await fs.readFile(CRASH_DATA_FILE, 'utf8');
-            await fs.writeFile(CRASH_DATA_FILE + '.backup', currentData);
-        } catch (error) {
-            // Ignore if backup fails
-        }
-
-        // Save the new data
-        await fs.writeFile(CRASH_DATA_FILE, JSON.stringify(data, null, 2));
-    } catch (error) {
-        console.error('Error saving crash data:', error.message);
-        // Try to restore from backup if save fails
-        try {
-            const backupData = await fs.readFile(CRASH_DATA_FILE + '.backup', 'utf8');
-            await fs.writeFile(CRASH_DATA_FILE, backupData);
-        } catch (backupError) {
-            console.error('Error restoring from backup:', backupError.message);
-        }
-    }
+    // This function is now handled by the database manager
+    // Keeping it for backward compatibility
+    console.warn('saveCrashData is deprecated, use db.saveTracker instead');
 }
 
 async function loadCrashData() {
-    try {
-        const data = await fs.readFile(CRASH_DATA_FILE, 'utf8');
-        return JSON.parse(data);
-    } catch (error) {
-        // If main file fails, try backup
-        try {
-            const backupData = await fs.readFile(CRASH_DATA_FILE + '.backup', 'utf8');
-            console.log('Recovered data from backup file');
-            return JSON.parse(backupData);
-        } catch (backupError) {
-            console.error('Error loading crash data:', error.message);
-            return null;
-        }
-    }
+    // This function is now handled by the database manager
+    // Keeping it for backward compatibility
+    console.warn('loadCrashData is deprecated, use db.loadTracker instead');
+    return await db.loadAllTrackers();
 }
 
 async function clearCrashData() {
+    // This function is now handled by the database manager
+    // Keeping it for backward compatibility
+    console.warn('clearCrashData is deprecated, use db.deleteTracker instead');
+}
+
+// Add migration function
+async function migrateToSqlite() {
+    if (config.database.type !== 'sqlite') return;
+
+    // Check if migration is needed first
+    if (db.migrationCompleted) {
+        console.log('Migration already completed, skipping...');
+        return;
+    }
+
+    console.log('Starting migration from JSON to SQLite...');
+    const migrationEmbed = new EmbedBuilder()
+        .setColor('#2b2d31')
+        .setTitle('🔄 Database Migration Started')
+        .setDescription('The tracker is being migrated from JSON to SQLite database for better performance and reliability.')
+        .addFields(
+            { name: '📊 Status', value: '```Migrating```', inline: true },
+            { name: '⏰ Time', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
+            { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true }
+        )
+        .setFooter({ 
+            text: 'Migration in progress...', 
+            iconURL: 'https://i.imgur.com/AfFp7pu.png'
+        })
+        .setTimestamp();
+
+    // Send migration start message to all active trackers
+    const migrationMessages = [];
+    let messageSent = false;
+
+    for (const [guildId, guildTrackers] of client.activeTrackers) {
+        for (const [channelId, tracker] of guildTrackers) {
+            try {
+                const message = tracker.message;
+                if (message) {
+                    console.log(`Sending migration message to guild ${guildId}, channel ${channelId}`);
+                    const migrationMsg = await message.channel.send({ embeds: [migrationEmbed] });
+                    migrationMessages.push(migrationMsg);
+                    messageSent = true;
+                }
+            } catch (error) {
+                console.error(`Error sending migration message in guild ${guildId}, channel ${channelId}:`, error.message);
+            }
+        }
+    }
+
+    if (!messageSent) {
+        console.log('No active trackers found to send migration messages to');
+    }
+
     try {
-        await fs.unlink(CRASH_DATA_FILE);
+        const success = await db.migrateFromJsonToSqlite();
+        
+        if (success) {
+            console.log('Migration completed successfully!');
+            
+            // Update all migration messages with success status
+            const successEmbed = new EmbedBuilder()
+                .setColor('#57F287')  // Discord success green
+                .setTitle('✅ Database Migration Complete')
+                .setDescription('The tracker has been successfully migrated to SQLite database.')
+                .addFields(
+                    { name: '📊 Status', value: '```Completed```', inline: true },
+                    { name: '⏰ Time', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
+                    { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true }
+                )
+                .setFooter({ 
+                    text: 'Migration completed successfully', 
+                    iconURL: 'https://i.imgur.com/AfFp7pu.png'
+                })
+                .setTimestamp();
+
+            for (const message of migrationMessages) {
+                try {
+                    await message.edit({ embeds: [successEmbed] });
+                } catch (error) {
+                    console.error('Error updating migration success message:', error.message);
+                }
+            }
+        } else {
+            throw new Error('Migration failed');
+        }
     } catch (error) {
-        // Ignore error if file doesn't exist
-        if (error.code !== 'ENOENT') {
-            console.error('Error clearing crash data:', error.message);
+        console.error('Migration failed:', error);
+        
+        // Update all migration messages with error status
+        const errorEmbed = new EmbedBuilder()
+            .setColor('#ED4245')  // Discord error red
+            .setTitle('❌ Database Migration Failed')
+            .setDescription('There was an error during the migration process.')
+            .addFields(
+                { name: '📊 Status', value: '```Failed```', inline: true },
+                { name: '⏰ Time', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
+                { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true },
+                { name: '❌ Error', value: `\`\`\`${error.message}\`\`\``, inline: false }
+            )
+            .setFooter({ 
+                text: 'Migration failed - Please check logs', 
+                iconURL: 'https://i.imgur.com/AfFp7pu.png'
+            })
+            .setTimestamp();
+
+        for (const message of migrationMessages) {
+            try {
+                await message.edit({ embeds: [errorEmbed] });
+            } catch (editError) {
+                console.error('Error updating migration error message:', editError.message);
+            }
         }
     }
 }
 
-// Move startTracker to be a client method
-client.startTracker = function(channel, existingMessage = null, initialTime = 0, initialLastCrashBy = null) {
+// Add rate limit check function
+function checkRateLimit(userId, command, limit = 3, window = 60000) {
+    const now = Date.now();
+    const userLimits = client.rateLimits.get(userId) || new Collection();
+    const commandLimit = userLimits.get(command) || { count: 0, resetTime: now + window };
+
+    if (now > commandLimit.resetTime) {
+        commandLimit.count = 1;
+        commandLimit.resetTime = now + window;
+    } else {
+        commandLimit.count++;
+    }
+
+    userLimits.set(command, commandLimit);
+    client.rateLimits.set(userId, userLimits);
+
+    return commandLimit.count <= limit;
+}
+
+// Update the startTracker method
+client.startTracker = async function(channel, existingMessage = null, initialTime = 0, initialLastCrashBy = null) {
     const guildId = channel.guild.id;
     const channelId = channel.id;
+
+    // Check rate limit
+    if (!checkRateLimit(channelId, 'startTracker', 1, 5000)) {
+        throw new Error('Please wait a moment before starting another tracker.');
+    }
 
     // Initialize guild map if it doesn't exist
     if (!this.activeTrackers.has(guildId)) {
@@ -102,12 +207,25 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
 
     // Check if there's already a tracker in this channel
     if (this.activeTrackers.get(guildId).has(channelId)) {
+        console.log(`Tracker already exists in guild ${guildId}, channel ${channelId}`);
         return false;
+    }
+
+    // Check if there's an existing tracker in the database
+    try {
+        const existingTracker = await db.loadTracker(guildId, channelId);
+        if (existingTracker && !existingMessage) {
+            console.log(`Found existing tracker in database for guild ${guildId}, channel ${channelId}`);
+            // Delete the old tracker from database since we're starting a new one
+            await db.deleteTracker(guildId, channelId);
+        }
+    } catch (error) {
+        console.error('Error checking existing tracker:', error.message);
     }
 
     let timeSinceLastCrash = initialTime;
     let lastCrashBy = initialLastCrashBy;
-    let totalCrashes = 0;  // Add total crashes counter
+    let totalCrashes = 0;
     let retryCount = 0;
     const maxRetries = 3;
     let interval;
@@ -139,24 +257,25 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
                 });
             }
 
+            // Add rate limit handling for message edits
+            if (!checkRateLimit(message.id, 'editMessage', 2, 5000)) {
+                console.log('Rate limit reached for message edits, skipping update');
+                return;
+            }
+
             await message.edit({ embeds: [embed] });
             retryCount = 0;
             
-            // Save current state
-            const crashData = await loadCrashData() || {};
-            if (!crashData[guildId]) {
-                crashData[guildId] = {};
-            }
-            crashData[guildId][channelId] = {
+            // Save current state using database manager
+            await db.saveTracker(guildId, channelId, {
                 messageId: message.id,
                 timeSinceLastCrash,
                 lastCrashBy,
                 lastUpdate: Date.now(),
                 status: 'Active',
                 version: VERSION,
-                totalCrashes: totalCrashes
-            };
-            await saveCrashData(crashData);
+                totalCrashes
+            });
         } catch (error) {
             console.error('Error updating tracker:', error.message);
             retryCount++;
@@ -293,53 +412,66 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
 
 // Move stopTracker to be a client method
 client.stopTracker = async function(guildId, channelId) {
-    const guildTrackers = this.activeTrackers.get(guildId);
-    if (!guildTrackers) return false;
+    console.log('stopTracker called for:', { guildId, channelId });
+    console.log('Current active trackers:', {
+        hasGuild: this.activeTrackers.has(guildId),
+        guildTrackers: this.activeTrackers.get(guildId) ? Array.from(this.activeTrackers.get(guildId).keys()) : []
+    });
 
-    const tracker = guildTrackers.get(channelId);
-    if (tracker) {
-        clearInterval(tracker.interval);
-        if (tracker.collector) {
-            tracker.collector.stop();
-        }
-        guildTrackers.delete(channelId);
-        
-        // Clean up empty guild maps
-        if (guildTrackers.size === 0) {
-            this.activeTrackers.delete(guildId);
-        }
-
-        // Update the message to show stopped status
-        try {
-            const message = tracker.message;
-            const embed = EmbedBuilder.from(message.embeds[0])
-                .setDescription(`**Time since last crash:**\n\`\`\`ansi\n${message.embeds[0].description.split('```ansi\n')[1].split('```')[0]}\`\`\``)
-                .spliceFields(0, 1, { name: '📊 Status', value: '```Inactive```', inline: true })
-                .setFooter({ 
-                    text: 'Tracker is stopped', 
-                    iconURL: 'https://i.imgur.com/AfFp7pu.png'
-                });
-            await message.edit({ embeds: [embed] });
-        } catch (error) {
-            console.error('Error updating message status:', error.message);
-        }
-
-        // Update crash data
-        try {
-            const crashData = await loadCrashData();
-            if (crashData && crashData[guildId]) {
-                delete crashData[guildId][channelId];
-                if (Object.keys(crashData[guildId]).length === 0) {
-                    delete crashData[guildId];
-                }
-                await saveCrashData(crashData);
-            }
-        } catch (error) {
-            console.error('Error updating crash data:', error.message);
-        }
-
-        return true;
+    // Check if there's actually a tracker in this channel
+    if (!this.activeTrackers.has(guildId) || !this.activeTrackers.get(guildId).has(channelId)) {
+        console.log(`No active tracker found in guild ${guildId}, channel ${channelId}`);
+        return false;
     }
+
+    const guildTrackers = this.activeTrackers.get(guildId);
+    const tracker = guildTrackers.get(channelId);
+    
+    if (tracker) {
+        console.log('Found tracker, stopping...');
+        try {
+            clearInterval(tracker.interval);
+            if (tracker.collector) {
+                tracker.collector.stop();
+            }
+            guildTrackers.delete(channelId);
+            
+            // Clean up empty guild maps
+            if (guildTrackers.size === 0) {
+                this.activeTrackers.delete(guildId);
+            }
+
+            // Update the message to show stopped status
+            try {
+                const message = tracker.message;
+                const embed = EmbedBuilder.from(message.embeds[0])
+                    .setDescription(`**Time since last crash:**\n\`\`\`ansi\n${message.embeds[0].description.split('```ansi\n')[1].split('```')[0]}\`\`\``)
+                    .spliceFields(0, 1, { name: '📊 Status', value: '```Inactive```', inline: true })
+                    .setFooter({ 
+                        text: 'Tracker is stopped', 
+                        iconURL: 'https://i.imgur.com/AfFp7pu.png'
+                    });
+                await message.edit({ embeds: [embed] });
+            } catch (error) {
+                console.error('Error updating message status:', error.message);
+            }
+
+            // Delete the tracker from the database
+            try {
+                await db.deleteTracker(guildId, channelId);
+                console.log(`Deleted tracker from database: guild ${guildId}, channel ${channelId}`);
+            } catch (error) {
+                console.error('Error deleting tracker from database:', error.message);
+            }
+
+            console.log('Tracker stopped successfully');
+            return true;
+        } catch (error) {
+            console.error('Error stopping tracker:', error);
+            return false;
+        }
+    }
+    console.log('No tracker object found');
     return false;
 };
 
@@ -380,18 +512,23 @@ async function registerSlashCommands(guildId = null, retryCount = 0) {
     }
 }
 
+// Update client.once('ready') to handle migration
 client.once('ready', async () => {
     console.log(`Bot is ready! Logged in as ${client.user.tag}`);
     console.log(`Using prefix: ${config.prefix}`);
     console.log(`Tracker settings: Updates every ${config.tracker.updateInterval/1000} seconds, increments by ${config.tracker.incrementAmount} seconds`);
+    console.log(`Database type: ${config.database.type}`);
 
     // Register commands for all current guilds
     await registerSlashCommands();
 
-    // Try to recover any existing crash data
-    const crashData = await loadCrashData();
-    if (crashData) {
-        console.log('Found existing crash data, attempting recovery...');
+    // Initialize database
+    await db.initialize();
+
+    // Try to recover any existing trackers first
+    const crashData = await db.loadAllTrackers();
+    if (crashData && Object.keys(crashData).length > 0) {
+        console.log('Found existing trackers, attempting recovery...');
         
         for (const [guildId, channels] of Object.entries(crashData)) {
             for (const [channelId, data] of Object.entries(channels)) {
@@ -420,16 +557,23 @@ client.once('ready', async () => {
                     
                     if (message) {
                         console.log(`Recovering existing message...`);
-                        client.startTracker(channel, message, newTimeSinceCrash, data.lastCrashBy);
+                        await client.startTracker(channel, message, newTimeSinceCrash, data.lastCrashBy);
                     } else {
                         console.log(`Creating new tracker message...`);
-                        client.startTracker(channel, null, newTimeSinceCrash, data.lastCrashBy);
+                        await client.startTracker(channel, null, newTimeSinceCrash, data.lastCrashBy);
                     }
                 } catch (error) {
                     console.error(`Error recovering tracker in guild ${guildId}, channel ${channelId}:`, error.message);
                 }
             }
         }
+    } else {
+        console.log('No existing trackers found in database.');
+    }
+
+    // Now that trackers are recovered, perform migration if needed
+    if (config.database.type === 'sqlite') {
+        await migrateToSqlite();
     }
 });
 
@@ -460,10 +604,18 @@ client.on('messageCreate', async (message) => {
             message.reply('Failed to start the tracker. Please try again later.');
         }
     } else if (message.content === `${config.prefix}stopTracker`) {
-        if (client.stopTracker(message.guild.id, message.channel.id)) {
-            message.reply('Tracker stopped successfully.');
-        } else {
-            message.reply('No active tracker found in this channel.');
+        console.log('Attempting to stop tracker...');
+        try {
+            const success = await client.stopTracker(message.guild.id, message.channel.id);
+            console.log('stopTracker result:', success);
+            if (success) {
+                message.reply('Tracker stopped successfully.');
+            } else {
+                message.reply('No active tracker found in this channel.');
+            }
+        } catch (error) {
+            console.error('Error stopping tracker:', error);
+            message.reply('Failed to stop the tracker. Please try again later.');
         }
     }
 });
@@ -556,7 +708,7 @@ process.on('SIGTERM', async () => {
     process.exit(0);
 });
 
-// Handle disconnects
+// Update the disconnect handler to use db.saveTracker
 client.on('disconnect', async () => {
     console.log('Bot disconnected from Discord');
     await updateAllTrackersToOffline('Bot is offline');
@@ -571,18 +723,14 @@ client.on('disconnect', async () => {
                 const totalCrashesField = message.embeds[0].fields.find(f => f.name === '💥 Total Crashes');
                 const totalCrashes = totalCrashesField ? parseInt(totalCrashesField.value.replace(/```/g, '')) : 0;
                 
-                loadCrashData().then(crashData => {
-                    if (!crashData[guildId]) crashData[guildId] = {};
-                    crashData[guildId][channelId] = {
-                        messageId: message.id,
-                        timeSinceLastCrash,
-                        lastCrashBy,
-                        lastUpdate: Date.now(),
-                        status: 'Offline',
-                        version: VERSION,
-                        totalCrashes: totalCrashes
-                    };
-                    saveCrashData(crashData);
+                db.saveTracker(guildId, channelId, {
+                    messageId: message.id,
+                    timeSinceLastCrash,
+                    lastCrashBy,
+                    lastUpdate: Date.now(),
+                    status: 'Offline',
+                    version: VERSION,
+                    totalCrashes
                 });
             }
         });

@@ -2,8 +2,27 @@ module.exports = {
     token: "your_bot_token_here",
     clientId: "your_client_id_here",
     prefix: "!",
+    
+    // Tracker settings
     tracker: {
         updateInterval: 10000,  // How often to update (in milliseconds)
         incrementAmount: 10     // How many seconds to add each update
+    },
+
+    // Database settings
+    database: {
+        // Storage type options:
+        // - 'json': Simple JSON file storage (good for small deployments)
+        // - 'sqlite': SQLite database storage (better for larger deployments)
+        type: 'sqlite',
+        
+        // SQLite database file path (only used if type is 'sqlite')
+        // The database will be created automatically if it doesn't exist
+        sqlitePath: './data/trackers.db',
+        verbose: false,  // Set to true to log SQL queries
+        
+        // JSON file path (only used if type is 'json')
+        // The file will be created automatically if it doesn't exist
+        jsonPath: './data/trackers.json'
     }
 };

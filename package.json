@@ -1,7 +1,7 @@
 {
-  "name": "counter-bot",
-  "version": "1.0.0",
-  "description": "Rust Minicopter Crash Tracker Bot",
+  "name": "minicopter-crash-tracker",
+  "version": "1.0.2",
+  "description": "A Discord bot to track Minicopter crashes",
   "homepage": "https://github.com/Keymasterkid/CrashWatch#readme",
   "bugs": {
     "url": "https://github.com/Keymasterkid/CrashWatch/issues"
@@ -21,6 +21,6 @@
   "dependencies": {
     "date-fns": "^4.1.0",
     "discord.js": "^14.14.1",
-    "dotenv": "^16.4.1"
+    "better-sqlite3": "^11.10.0"
   }
 }

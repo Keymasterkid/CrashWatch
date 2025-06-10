@@ -19,6 +19,12 @@ A Discord bot that tracks Minicopter crashes in Rust. Created by BaseCode™ (ke
 - Automatic command registration for new servers
 - Offline time tracking and recovery
 - Graceful shutdown handling
+- Database support (SQLite or JSON)
+- Automatic migration from JSON to SQLite
+- Rate limiting to prevent abuse
+- Better error handling and recovery
+- Database health monitoring
+- Connection pooling and retry mechanism
 
 ## Required Permissions
 
@@ -30,6 +36,7 @@ The bot requires the following permissions to function properly:
 - Embed Links
 - Attach Files
 - Read Messages/View Channels
+- Manage Messages (for reaction cleanup)
 
 To ensure the bot has these permissions:
 1. When inviting the bot to your server, use the OAuth2 URL with the required permissions
@@ -63,6 +70,12 @@ module.exports = {
     tracker: {
         updateInterval: 10000,  // How often to update (in milliseconds)
         incrementAmount: 10     // How many seconds to add each update
+    },
+    database: {
+        type: 'sqlite',  // Storage type ('json' or 'sqlite')
+        sqlitePath: './data/trackers.db',  // Path for SQLite database
+        verbose: false,  // Set to true to log SQL queries
+        jsonPath: './data/trackers.json'  // Path for JSON storage
     }
 };
 ```
@@ -106,6 +119,9 @@ Available timezones:
 - Commands are automatically registered when the bot joins new servers
 - Tracker status is shown in the embed (Active/Inactive/Error)
 - Offline time is automatically tracked and added when the bot reconnects
+- Rate limiting prevents command spam and abuse
+- Automatic retry mechanism for failed operations
+- Database health monitoring and automatic recovery
 
 ## Multi-Server Support
 
@@ -116,22 +132,28 @@ The bot now supports multiple servers and channels:
 - All trackers are automatically recovered after bot restart
 - Commands are automatically registered for new servers
 - Each server maintains its own crash data
+- Rate limiting per channel and user
+- Better error handling and recovery per channel
 
 ## Data Persistence and Backup
 
-The bot automatically saves its state to `crash_data.json`, which includes:
+The bot automatically saves its state to the configured database, which includes:
 - Current tracking time for each channel
 - Last crash reporter for each channel
 - Channel and message information
 - Last update timestamp
 - Tracker status
+- Total crash count
+- Migration status
 
 The backup system:
 - Creates automatic backups before saving new data
-- Maintains a backup file (`crash_data.json.backup`)
+- Maintains a backup file for JSON storage
 - Recovers from backup if the main file is corrupted
 - Preserves data across bot restarts and crashes
 - Handles offline time tracking
+- Automatic database health checks
+- Connection pooling for better performance
 
 ## Status Indicators
 
@@ -140,6 +162,9 @@ The tracker shows different statuses:
 - **Inactive**: Tracker has been stopped
 - **Offline**: Bot is offline or shutting down
 - **Error**: An error has occurred
+- **Rate Limited**: Command usage is temporarily restricted
+- **Database Error**: Database connection issues
+- **Recovering**: Automatic recovery in progress 
 
 ## Offline Handling
 
@@ -150,6 +175,8 @@ The bot handles offline scenarios gracefully:
 - Recovers automatically when back online
 - Shows detailed error information if needed
 - Handles graceful shutdowns (Ctrl+C)
+- Automatic database reconnection
+- Connection retry mechanism
 
 ## Configuration
 
@@ -160,6 +187,44 @@ You can customize the bot's behavior in `config.js`:
 - `prefix`: Command prefix (default: "!")
 - `tracker.updateInterval`: How often the tracker updates (in milliseconds)
 - `tracker.incrementAmount`: How many seconds to add each update
+- `database.type`: Storage type ('json' or 'sqlite')
+- `database.sqlitePath`: Path for SQLite database (if using SQLite)
+- `database.verbose`: Enable SQL query logging (SQLite only)
+- `database.jsonPath`: Path for JSON storage (if using JSON)
+
+## Database Support
+
+The bot now supports two database types:
+
+1. **JSON Storage**
+   - Simple file-based storage
+   - Good for small deployments
+   - Data stored in `data/trackers.json`
+   - Automatic backup system
+   - Easy to read and modify manually
+
+2. **SQLite Storage**
+   - More robust database storage
+   - Better for larger deployments
+   - Data stored in `data/trackers.db`
+   - Automatic migration from JSON to SQLite
+   - Better performance and reliability
+   - Connection pooling
+   - Automatic retry mechanism
+   - Health monitoring
+   - WAL mode for better performance
+   - Configurable query logging
+
+### Migration from JSON to SQLite
+
+When switching to SQLite:
+1. Set `database.type` to `'sqlite'` in `config.js`
+2. The bot will automatically migrate data from JSON to SQLite
+3. A backup of the JSON file will be created
+4. Migration status is tracked to prevent repeated migrations
+5. Automatic rollback if migration fails
+6. Progress tracking during migration
+7. Detailed error reporting
 
 ## License
 

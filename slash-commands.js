@@ -45,13 +45,22 @@ async function checkPermissions(interaction) {
 
 // Helper function to validate timezone
 function isValidTimezone(timezone) {
-    // Check if the timezone is in our list
-    return TIMEZONES.some(tz => tz.value === timezone);
+    try {
+        Intl.DateTimeFormat(undefined, { timeZone: timezone });
+        return true;
+    } catch (error) {
+        return false;
+    }
 }
 
 // Helper function to validate date
 function isValidDate(date) {
-    return date instanceof Date && !isNaN(date);
+    return date instanceof Date && !isNaN(date) && date.getTime() > 0;
+}
+
+// Helper function to validate time
+function isValidTime(hours, minutes) {
+    return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
 }
 
 const commands = [
@@ -117,17 +126,21 @@ module.exports = {
             // Check permissions
             if (!await checkPermissions(interaction)) return;
 
-            if (interaction.client.stopTracker(interaction.guildId, interaction.channelId)) {
-                await interaction.reply('Tracker stopped successfully.');
+            // Defer the reply since stopping might take a moment
+            await interaction.deferReply();
+
+            const success = await interaction.client.stopTracker(interaction.guildId, interaction.channelId);
+            if (success) {
+                await interaction.editReply('Tracker stopped successfully.');
             } else {
-                await interaction.reply({
+                await interaction.editReply({
                     content: '❌ No active tracker found in this channel.',
                     ephemeral: true
                 });
             }
         } catch (error) {
             console.error('Error stopping tracker:', error);
-            await interaction.reply({
+            await interaction.editReply({
                 content: '❌ An error occurred while stopping the tracker. Please try again.',
                 ephemeral: true
             });
@@ -141,6 +154,14 @@ module.exports = {
 
             const guildId = interaction.guildId;
             const channelId = interaction.channelId;
+
+            // Check rate limit
+            if (!interaction.client.checkRateLimit(interaction.user.id, 'startFromTime', 1, 5000)) {
+                return await interaction.reply({
+                    content: '❌ Please wait a moment before using this command again.',
+                    ephemeral: true
+                });
+            }
 
             if (interaction.client.activeTrackers.has(guildId) && 
                 interaction.client.activeTrackers.get(guildId).has(channelId)) {
@@ -177,7 +198,7 @@ module.exports = {
             minutes = parseInt(minutes);
 
             // Validate hours and minutes
-            if (hours < 1 || hours > 12 || minutes < 0 || minutes > 59) {
+            if (!isValidTime(hours, minutes)) {
                 return await interaction.reply({
                     content: '❌ Invalid time values. Hours must be 1-12 and minutes must be 0-59.',
                     ephemeral: true
@@ -222,6 +243,15 @@ module.exports = {
             if (targetDate > now) {
                 return await interaction.reply({
                     content: '❌ Cannot start tracker from a future time. Please provide a past time.',
+                    ephemeral: true
+                });
+            }
+
+            // Check if date is too old (e.g., more than 30 days)
+            const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+            if (targetDate < thirtyDaysAgo) {
+                return await interaction.reply({
+                    content: '❌ Cannot start tracker from more than 30 days ago. Please provide a more recent time.',
                     ephemeral: true
                 });
             }
