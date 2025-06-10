@@ -5,7 +5,7 @@ const config = require('./config.js');
 const slashCommands = require('./slash-commands.js');
 
 // Bot version
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 
 const client = new Client({ 
     intents: [
@@ -107,6 +107,7 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
 
     let timeSinceLastCrash = initialTime;
     let lastCrashBy = initialLastCrashBy;
+    let totalCrashes = 0;  // Add total crashes counter
     let retryCount = 0;
     const maxRetries = 3;
     let interval;
@@ -121,7 +122,8 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
                 .addFields(
                     { name: '📊 Status', value: '```Active```', inline: true },
                     { name: '⏰ Last Update', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
-                    { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true }
+                    { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true },
+                    { name: '💥 Total Crashes', value: `\`\`\`${totalCrashes}\`\`\``, inline: true }
                 )
                 .setFooter({ 
                     text: 'Click 🔄 to report a crash', 
@@ -151,7 +153,8 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
                 lastCrashBy,
                 lastUpdate: Date.now(),
                 status: 'Active',
-                version: VERSION
+                version: VERSION,
+                totalCrashes: totalCrashes
             };
             await saveCrashData(crashData);
         } catch (error) {
@@ -192,6 +195,11 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
             let trackerMsg;
             if (existingMessage) {
                 trackerMsg = existingMessage;
+                // Load total crashes from saved data
+                const crashData = await loadCrashData();
+                if (crashData && crashData[guildId] && crashData[guildId][channelId]) {
+                    totalCrashes = crashData[guildId][channelId].totalCrashes || 0;
+                }
                 await updateMessage(trackerMsg);
             } else {
                 const initialEmbed = new EmbedBuilder()
@@ -201,7 +209,8 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
                     .addFields(
                         { name: '📊 Status', value: '```Active```', inline: true },
                         { name: '⏰ Last Update', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
-                        { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true }
+                        { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true },
+                        { name: '💥 Total Crashes', value: `\`\`\`${totalCrashes}\`\`\``, inline: true }
                     )
                     .setFooter({ 
                         text: 'Click 🔄 to report a crash', 
@@ -225,6 +234,7 @@ client.startTracker = function(channel, existingMessage = null, initialTime = 0,
                 console.log(`Crash reported by ${user.tag}`);
                 timeSinceLastCrash = 0;
                 lastCrashBy = user.tag;
+                totalCrashes++;  // Increment total crashes
                 try {
                     await updateMessage(trackerMsg);
                     // Check if bot has permission to remove reactions
@@ -497,6 +507,8 @@ async function updateAllTrackersToOffline(reason = 'Bot is offline') {
                     const currentTime = message.embeds[0].description.split('```ansi\n')[1].split('```')[0];
                     const lastCrashByField = message.embeds[0].fields.find(f => f.name === '👤 Last Crash Reporter');
                     const lastCrashBy = lastCrashByField ? lastCrashByField.value.replace(/```/g, '') : null;
+                    const totalCrashesField = message.embeds[0].fields.find(f => f.name === '💥 Total Crashes');
+                    const totalCrashes = totalCrashesField ? parseInt(totalCrashesField.value.replace(/```/g, '')) : 0;
                     
                     const offlineEmbed = new EmbedBuilder()
                         .setColor('#747f8d')  // Discord offline gray
@@ -505,7 +517,8 @@ async function updateAllTrackersToOffline(reason = 'Bot is offline') {
                         .addFields(
                             { name: '📊 Status', value: '```Offline```', inline: true },
                             { name: '⏰ Last Update', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
-                            { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true }
+                            { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true },
+                            { name: '💥 Total Crashes', value: `\`\`\`${totalCrashes}\`\`\``, inline: true }
                         )
                         .setFooter({ 
                             text: reason, 
@@ -555,6 +568,8 @@ client.on('disconnect', async () => {
             if (message && message.embeds[0]) {
                 const timeSinceLastCrash = parseInt(message.embeds[0].description.split('```ansi\n')[1].split('```')[0]);
                 const lastCrashBy = message.embeds[0].fields.find(f => f.name === '👤 Last Crash Reporter')?.value;
+                const totalCrashesField = message.embeds[0].fields.find(f => f.name === '💥 Total Crashes');
+                const totalCrashes = totalCrashesField ? parseInt(totalCrashesField.value.replace(/```/g, '')) : 0;
                 
                 loadCrashData().then(crashData => {
                     if (!crashData[guildId]) crashData[guildId] = {};
@@ -562,7 +577,10 @@ client.on('disconnect', async () => {
                         messageId: message.id,
                         timeSinceLastCrash,
                         lastCrashBy,
-                        lastUpdate: Date.now()
+                        lastUpdate: Date.now(),
+                        status: 'Offline',
+                        version: VERSION,
+                        totalCrashes: totalCrashes
                     };
                     saveCrashData(crashData);
                 });
