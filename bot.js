@@ -70,102 +70,46 @@ async function migrateToSqlite() {
     }
 
     console.log('Starting migration from JSON to SQLite...');
-    const migrationEmbed = new EmbedBuilder()
-        .setColor('#2b2d31')
-        .setTitle('🔄 Database Migration Started')
-        .setDescription('The tracker is being migrated from JSON to SQLite database for better performance and reliability.')
-        .addFields(
-            { name: '📊 Status', value: '```Migrating```', inline: true },
-            { name: '⏰ Time', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
-            { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true }
-        )
-        .setFooter({ 
-            text: 'Migration in progress...', 
-            iconURL: 'https://i.imgur.com/AfFp7pu.png'
-        })
-        .setTimestamp();
-
-    // Send migration start message to all active trackers
     const migrationMessages = [];
-    let messageSent = false;
-
-    for (const [guildId, guildTrackers] of client.activeTrackers) {
-        for (const [channelId, tracker] of guildTrackers) {
-            try {
-                const message = tracker.message;
-                if (message) {
-                    console.log(`Sending migration message to guild ${guildId}, channel ${channelId}`);
-                    const migrationMsg = await message.channel.send({ embeds: [migrationEmbed] });
-                    migrationMessages.push(migrationMsg);
-                    messageSent = true;
-                }
-            } catch (error) {
-                console.error(`Error sending migration message in guild ${guildId}, channel ${channelId}:`, error.message);
-            }
-        }
-    }
-
-    if (!messageSent) {
-        console.log('No active trackers found to send migration messages to');
-    }
 
     try {
         const success = await db.migrateFromJsonToSqlite();
         
-        if (success) {
-            console.log('Migration completed successfully!');
-            
-            // Update all migration messages with success status
-            const successEmbed = new EmbedBuilder()
-                .setColor('#57F287')  // Discord success green
-                .setTitle('✅ Database Migration Complete')
-                .setDescription('The tracker has been successfully migrated to SQLite database.')
-                .addFields(
-                    { name: '📊 Status', value: '```Completed```', inline: true },
-                    { name: '⏰ Time', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
-                    { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true }
-                )
-                .setFooter({ 
-                    text: 'Migration completed successfully', 
-                    iconURL: 'https://i.imgur.com/AfFp7pu.png'
-                })
-                .setTimestamp();
-
-            for (const message of migrationMessages) {
-                try {
-                    await message.edit({ embeds: [successEmbed] });
-                } catch (error) {
-                    console.error('Error updating migration success message:', error.message);
-                }
-            }
-        } else {
+        if (!success) {
             throw new Error('Migration failed');
         }
+        
+        console.log('Migration completed successfully!');
     } catch (error) {
         console.error('Migration failed:', error);
         
-        // Update all migration messages with error status
-        const errorEmbed = new EmbedBuilder()
-            .setColor('#ED4245')  // Discord error red
-            .setTitle('❌ Database Migration Failed')
-            .setDescription('There was an error during the migration process.')
-            .addFields(
-                { name: '📊 Status', value: '```Failed```', inline: true },
-                { name: '⏰ Time', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
-                { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true },
-                { name: '❌ Error', value: `\`\`\`${error.message}\`\`\``, inline: false }
-            )
-            .setFooter({ 
-                text: 'Migration failed - Please check logs', 
-                iconURL: 'https://i.imgur.com/AfFp7pu.png'
-            })
-            .setTimestamp();
+        // Only send error message if there are active trackers
+        for (const [guildId, guildTrackers] of client.activeTrackers) {
+            for (const [channelId, tracker] of guildTrackers) {
+                try {
+                    const message = tracker.message;
+                    if (message) {
+                        const errorEmbed = new EmbedBuilder()
+                            .setColor('#ED4245')  // Discord error red
+                            .setTitle('❌ Database Migration Failed')
+                            .setDescription('There was an error during the migration process.')
+                            .addFields(
+                                { name: '📊 Status', value: '```Failed```', inline: true },
+                                { name: '⏰ Time', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
+                                { name: '📦 Version', value: `\`\`\`${VERSION}\`\`\``, inline: true },
+                                { name: '❌ Error', value: `\`\`\`${error.message}\`\`\``, inline: false }
+                            )
+                            .setFooter({ 
+                                text: 'Migration failed - Please check logs', 
+                                iconURL: 'https://i.imgur.com/AfFp7pu.png'
+                            })
+                            .setTimestamp();
 
-        for (const message of migrationMessages) {
-            try {
-                await message.edit({ embeds: [errorEmbed] });
-            } catch (editError) {
-                console.error('Error updating migration error message:', editError.message);
+                        await message.channel.send({ embeds: [errorEmbed] });
+                    }
+                } catch (sendError) {
+                    console.error('Error sending migration error message:', sendError.message);
+                }
             }
         }
     }
