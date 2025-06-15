@@ -3,6 +3,15 @@ module.exports = {
     clientId: "your_client_id_here",
     prefix: "!",
     
+    // Debug mode settings
+    debug: {
+        enabled: false,  // Enable debug mode
+        logLevel: 'info',  // Log level: 'debug', 'info', 'warn', 'error'
+        showSQL: false,  // Show SQL queries in debug mode
+        showTimestamps: true,  // Show timestamps in debug logs
+        showStackTraces: false  // Show stack traces in error messages
+    },
+
     // Tracker settings
     tracker: {
         updateInterval: 10000,  // How often to update (in milliseconds)
