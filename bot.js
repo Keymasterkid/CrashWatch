@@ -488,6 +488,7 @@ client.startTracker = async function(channel, existingMessage = null, initialTim
                     debugLog(`Tracker reset by ${user.tag}`, 'info');
                     timeSinceLastCrash = 0;
                     lastCrashBy = null;
+                    totalCrashes = 0; // Reset total crashes as well
                     // Optionally, you could log who reset it, or add a field for last resetter
                 }
                 try {
