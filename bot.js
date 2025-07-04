@@ -490,6 +490,17 @@ client.startTracker = async function(channel, existingMessage = null, initialTim
                     lastCrashBy = null;
                     totalCrashes = 0; // Reset total crashes as well
                     // Optionally, you could log who reset it, or add a field for last resetter
+
+                    // Ensure the crash reaction (🔄) is present after reset
+                    const existingReactions = trackerMsg.reactions.cache;
+                    if (!existingReactions.has('🔄')) {
+                        try {
+                            await trackerMsg.react('🔄');
+                            debugLog('Re-added crash reaction (🔄) after reset', 'debug');
+                        } catch (e) {
+                            debugLog(`Failed to re-add crash reaction: ${e.message}`, 'warn');
+                        }
+                    }
                 }
                 try {
                     await updateMessage(trackerMsg);
