@@ -6,7 +6,7 @@ const slashCommands = require('./slash-commands.js');
 const db = require('./database.js');
 
 // Bot version
-const VERSION = '1.0.3';
+const VERSION = '1.0.4';
 
 const client = new Client({ 
     intents: [
@@ -462,8 +462,9 @@ client.startTracker = async function(channel, existingMessage = null, initialTim
                     .setTimestamp();
 
                 trackerMsg = await channel.send({ embeds: [initialEmbed] });
-                await trackerMsg.react('🔄');
-                debugLog(`Created new tracker message and added reaction`, 'debug');
+                await trackerMsg.react('🔄'); // Only auto-add crash reaction
+                // Do NOT auto-add reset reaction (⏹️); user must add it manually
+                debugLog(`Created new tracker message and added crash reaction`, 'debug');
             }
 
             interval = setInterval(async () => {
@@ -472,15 +473,23 @@ client.startTracker = async function(channel, existingMessage = null, initialTim
             }, config.tracker.updateInterval);
             debugLog(`Started update interval: ${config.tracker.updateInterval}ms`, 'debug');
 
-            const filter = (reaction, user) => reaction.emoji.name === '🔄' && !user.bot;
+            // Update: support both crash and reset reactions (reset = ⏹️, must be added by user)
+            const filter = (reaction, user) => (reaction.emoji.name === '🔄' || reaction.emoji.name === '⏹️') && !user.bot;
             collector = trackerMsg.createReactionCollector({ filter });
             debugLog(`Created reaction collector`, 'debug');
 
             collector.on('collect', async (reaction, user) => {
-                debugLog(`Crash reported by ${user.tag}`, 'info');
-                timeSinceLastCrash = 0;
-                lastCrashBy = user.tag;
-                totalCrashes++;
+                if (reaction.emoji.name === '🔄') {
+                    debugLog(`Crash reported by ${user.tag}`, 'info');
+                    timeSinceLastCrash = 0;
+                    lastCrashBy = user.tag;
+                    totalCrashes++;
+                } else if (reaction.emoji.name === '⏹️') {
+                    debugLog(`Tracker reset by ${user.tag}`, 'info');
+                    timeSinceLastCrash = 0;
+                    lastCrashBy = null;
+                    // Optionally, you could log who reset it, or add a field for last resetter
+                }
                 try {
                     await updateMessage(trackerMsg);
                     // Check if bot has permission to remove reactions
@@ -489,7 +498,7 @@ client.startTracker = async function(channel, existingMessage = null, initialTim
                         debugLog(`Removed reaction from ${user.tag}`, 'debug');
                     }
                 } catch (error) {
-                    debugLog(`Error updating crash report: ${error.message}`, 'error');
+                    debugLog(`Error updating tracker on reaction: ${error.message}`, 'error');
                 }
             });
 
