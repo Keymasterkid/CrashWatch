@@ -1,6 +1,6 @@
 # CrashWatch - Rust Minicopter Crash Tracker
 
-A Discord bot that tracks Minicopter crashes in Rust. Created by BaseCode™ (keymasterkid).
+A Discord bot that tracks Minicopter crashes in Rust. Created by OG69 Dev™ (keymasterkid).
 
 ## Features
 
@@ -232,7 +232,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Author
 
-- BaseCode™ (keymasterkid)
+- OG69 Dev™ (keymasterkid)
 - GitHub: [Keymasterkid](https://github.com/Keymasterkid)
 
 ## Contributing
@@ -249,4 +249,4 @@ If you encounter any issues, please [open an issue](https://github.com/Keymaster
 
 ---
 
-© 2025 BaseCode™ 
+© 2025 OG69 Dev™ 
