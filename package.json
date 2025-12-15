@@ -1,6 +1,6 @@
 {
   "name": "minicopter-crash-tracker",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "A Discord bot to track Minicopter crashes",
   "homepage": "https://github.com/Keymasterkid/CrashWatch#readme",
   "bugs": {

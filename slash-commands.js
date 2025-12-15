@@ -67,7 +67,7 @@ const commands = [
     new SlashCommandBuilder()
         .setName('starttracker')
         .setDescription('Start the Minicopter crash tracker in the current channel'),
-    
+
     new SlashCommandBuilder()
         .setName('stoptracker')
         .setDescription('Stop the Minicopter crash tracker in the current channel'),
@@ -99,8 +99,8 @@ module.exports = {
             if (!await checkPermissions(interaction)) return;
 
             // Check if tracker is already running in this channel
-            if (interaction.client.activeTrackers.has(interaction.guildId) && 
-                interaction.client.activeTrackers.get(interaction.guildId).has(interaction.channelId)) {
+            if (interaction.client.trackerManager.activeTrackers.has(interaction.guildId) &&
+                interaction.client.trackerManager.activeTrackers.get(interaction.guildId).has(interaction.channelId)) {
                 return await interaction.reply({
                     content: '❌ A tracker is already running in this channel!',
                     ephemeral: true
@@ -108,7 +108,7 @@ module.exports = {
             }
 
             await interaction.reply('Starting Minicopter crash tracker...');
-            const success = await interaction.client.startTracker(interaction.channel);
+            const success = await interaction.client.trackerManager.startTracker(interaction.channel);
             if (!success) {
                 await interaction.followUp('Failed to start the tracker. Please try again later.');
             }
@@ -129,7 +129,7 @@ module.exports = {
             // Defer the reply since stopping might take a moment
             await interaction.deferReply();
 
-            const success = await interaction.client.stopTracker(interaction.guildId, interaction.channelId);
+            const success = await interaction.client.trackerManager.stopTracker(interaction.guildId, interaction.channelId);
             if (success) {
                 await interaction.editReply('Tracker stopped successfully.');
             } else {
@@ -156,15 +156,15 @@ module.exports = {
             const channelId = interaction.channelId;
 
             // Check rate limit
-            if (!interaction.client.checkRateLimit(interaction.user.id, 'startFromTime', 1, 5000)) {
+            if (!interaction.client.trackerManager.checkRateLimit(interaction.user.id, 'startFromTime', 1, 5000)) {
                 return await interaction.reply({
                     content: '❌ Please wait a moment before using this command again.',
                     ephemeral: true
                 });
             }
 
-            if (interaction.client.activeTrackers.has(guildId) && 
-                interaction.client.activeTrackers.get(guildId).has(channelId)) {
+            if (interaction.client.trackerManager.activeTrackers.has(guildId) &&
+                interaction.client.trackerManager.activeTrackers.get(guildId).has(channelId)) {
                 return await interaction.reply({
                     content: '❌ A tracker is already running in this channel. Use `/stoptracker` to stop it first.',
                     ephemeral: true
@@ -257,13 +257,13 @@ module.exports = {
             }
 
             const timeSinceCrash = Math.floor((now - targetDate) / 1000);
-            
+
             // Format the time and date for display
             const formattedDate = format(targetDate, 'MM/dd');
             const formattedTime = format(targetDate, 'h:mm a');
 
             await interaction.reply(`Starting Minicopter crash tracker from ${formattedTime} ${formattedDate} ${timezone}...`);
-            const success = await interaction.client.startTracker(interaction.channel, null, timeSinceCrash);
+            const success = await interaction.client.trackerManager.startTracker(interaction.channel, null, timeSinceCrash);
             if (!success) {
                 await interaction.followUp('Failed to start the tracker. Please try again later.');
             }
